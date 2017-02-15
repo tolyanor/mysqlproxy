@@ -1,41 +1,62 @@
 package main
 
 import (
-  "fmt"
-  "os"
-	"log"
-	"github.com/gorilla/mux"
-	"net/http"
-	"time"
-	_ "github.com/go-sql-driver/mysql"
 	"database/sql"
+	"flag"
+	"fmt"
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/gorilla/mux"
+	"log"
+	"net/http"
 	"strings"
+	"time"
 )
 
 var db *sql.DB
+var accessToken string
 
 func main() {
-	if len(os.Args) < 2 {
-		log.Fatal("Need mysql connection string in pararm. For example user:pass@/dbname")
-	}
-  db1, err := sql.Open("mysql", os.Args[1])
-  checkErr(err)
-  db = db1
+	mysqlString, accessToken1, sessionKey, port := checkFlags()
+	accessToken = accessToken1
+
+	log.Println(sessionKey)
+
+	db1, err := sql.Open("mysql", mysqlString)
+	checkErr(err)
+	db = db1
 
 	r := mux.NewRouter()
-	r.HandleFunc("/query/{qr}", queryHandler).Methods("GET")	
+	r.HandleFunc("/query/{qr}", queryHandler).Methods("GET")
 
 	srv := &http.Server{
-    Handler:      r,
-    Addr:         "127.0.0.1:7000",
-    WriteTimeout: 15 * time.Second,
-    ReadTimeout:  15 * time.Second,
-  }
+		Handler:      r,
+		Addr:         "127.0.0.1:" + string(port),
+		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  15 * time.Second,
+	}
 
-  log.Printf("mysqlproxy started")
-  log.Fatal(srv.ListenAndServe())
+	log.Printf("mysqlproxy started")
+	log.Fatal(srv.ListenAndServe())
 }
 
+func checkFlags() (string, string, string, string) {
+	mysqlFlag := flag.String("mysqlFlag", "", "mysqlConnectionString -mysqlFlag=user:pass@/dbname")
+	accessToken := flag.String("accessToken", "", "access token for client authorization")
+	sessionKey := flag.String("sessionKey", "very secret", "session store encryption key")
+	port := flag.String("port", "7000", "application listen port")
+
+	flag.Parse()
+
+	if *mysqlFlag == "" {
+		log.Fatal("Need mysql connection string flag. For example -mysqlFlag=user:pass@/dbname")
+	}
+
+	if *accessToken == "" {
+		log.Fatal("Need accessToken flag. For example -accessToken=supersecret")
+	}
+
+	return *mysqlFlag, *accessToken, *sessionKey, *port
+}
 
 func queryHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
@@ -45,23 +66,22 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 	var err error
 
 	if strings.Index(qr, "select") == 0 {
-  	res, err = query(qr, db)
+		res, err = query(qr, db)
 	} else {
 		res, err = exec(qr, db)
 	}
-	if (err != nil) {
+	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "%s", err)	
-	  log.Printf("query %s %s", qr, err)
+		fmt.Fprintf(w, "%s", err)
+		log.Printf("query %s %s", qr, err)
 	} else {
-		fmt.Fprintf(w, "%s", res)	
-	  log.Printf("query %s", qr)
+		fmt.Fprintf(w, "%s", res)
+		log.Printf("query %s", qr)
 	}
 }
 
 func checkErr(err error) {
-  if err != nil {
-    panic(err)
-  }
+	if err != nil {
+		panic(err)
+	}
 }
-
