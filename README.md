@@ -8,19 +8,19 @@
 
 Необходимо выполнить:
 
-		 go get github.com/go-sql-driver/mysql
+     go get github.com/go-sql-driver/mysql
      go get github.com/gorilla/sessions
      go get github.com/gorilla/mux
 
 Зайти в папку *mysqlproxy* и скомпилировать:
 
-		 cd mysqlproxy
-		 go build -o ./mysqlproxy *.go
+     cd mysqlproxy
+     go build -o ./mysqlproxy *.go
 
 
 ### Как это работает
 
-Скомпилированный файл следует запускть со следующими флагами:
+Скомпилированный файл следует запускать со следующими флагами:
 
 - *mysqlString* - строка подключения к MySQL, например user:pass@/dbname
 - *accessToken* - секретный токен, который будет использоваться в запросах к сервису
