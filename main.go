@@ -6,6 +6,7 @@ import (
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
+	"github.com/gorilla/sessions"
 	"log"
 	"net/http"
 	"strings"
@@ -14,19 +15,23 @@ import (
 
 var db *sql.DB
 var accessToken string
+var cookieStore *sessions.CookieStore
 
 func main() {
-	mysqlString, accessToken1, sessionKey, port := checkFlags()
-	accessToken = accessToken1
+	var mysqlString, port string
+	mysqlString, accessToken, port = checkFlags()
 
-	log.Println(sessionKey)
+	cookieStore = sessions.NewCookieStore([]byte(accessToken))
 
 	db1, err := sql.Open("mysql", mysqlString)
-	checkErr(err)
+	if err != nil {
+		panic(err)
+	}
 	db = db1
 
 	r := mux.NewRouter()
 	r.HandleFunc("/query/{qr}", queryHandler).Methods("GET")
+	r.HandleFunc("/login/{token}", loginHandler).Methods("GET")
 
 	srv := &http.Server{
 		Handler:      r,
@@ -39,26 +44,31 @@ func main() {
 	log.Fatal(srv.ListenAndServe())
 }
 
-func checkFlags() (string, string, string, string) {
-	mysqlFlag := flag.String("mysqlFlag", "", "mysqlConnectionString -mysqlFlag=user:pass@/dbname")
+func checkFlags() (string, string, string) {
+	mysqlFlag := flag.String("mysqlString", "", "mysqlConnectionString -mysqlFlag=user:pass@/dbname")
 	accessToken := flag.String("accessToken", "", "access token for client authorization")
-	sessionKey := flag.String("sessionKey", "very secret", "session store encryption key")
 	port := flag.String("port", "7000", "application listen port")
 
 	flag.Parse()
 
 	if *mysqlFlag == "" {
-		log.Fatal("Need mysql connection string flag. For example -mysqlFlag=user:pass@/dbname")
+		log.Fatal("Need mysql connection string flag. For example -mysqlString=user:pass@/dbname")
 	}
 
 	if *accessToken == "" {
 		log.Fatal("Need accessToken flag. For example -accessToken=supersecret")
 	}
 
-	return *mysqlFlag, *accessToken, *sessionKey, *port
+	return *mysqlFlag, *accessToken, *port
 }
 
 func queryHandler(w http.ResponseWriter, r *http.Request) {
+	if !isLoggedIn(r) {
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprintf(w, "Forbidden")
+		return
+	}
+
 	vars := mux.Vars(r)
 	qr := vars["qr"]
 
@@ -77,11 +87,5 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		fmt.Fprintf(w, "%s", res)
 		log.Printf("query %s", qr)
-	}
-}
-
-func checkErr(err error) {
-	if err != nil {
-		panic(err)
 	}
 }
